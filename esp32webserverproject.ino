@@ -1,52 +1,76 @@
-// Basic OV7670 Test (No FIFO version)
-// Just to check camera ID over SCCB (I2C-like protocol)
+#include <WiFi.h>
+#include <WebServer.h>
 
-#include <Wire.h>
+const char* ssid = "Soumya";
+const char* password = "soumya0205";
 
-#define OV7670_SDA 21  // Adjust according to your wiring
-#define OV7670_SCL 22
+const int ledPin = 2;
 
-void writeReg(uint8_t reg, uint8_t val) {
-  Wire.beginTransmission(0x21); // OV7670 write address
-  Wire.write(reg);
-  Wire.write(val);
-  Wire.endTransmission();
+WebServer server(80);
+
+void handleRoot() {
+  String html = "<!DOCTYPE html><html><head>";
+  html += "<title>ESP32 LED Control</title>";
+  html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+  html += "<style>";
+  html += "body {font-family: Arial, sans-serif; background-color: #f4f4f4; text-align: center; padding-top: 50px;}";
+  html += "h1 {color: #333;}";
+  html += ".button {padding: 15px 40px; font-size: 18px; margin: 20px; border: none; border-radius: 10px;";
+  html += "cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: background-color 0.3s ease, transform 0.2s ease;}";
+  html += ".button:hover {transform: scale(1.05);}";
+  html += ".on {background-color: #28a745; color: white;}";
+  html += ".off {background-color: #dc3545; color: white;}";
+  html += ".form-container {display: inline-block;}";
+  html += "</style></head><body>";
+  html += "<h1>ESP32 LED Control Panel</h1>";
+  html += "<div class='form-container'>";
+  html += "<form action='/LEDOn' method='POST'>";
+  html += "<button class='button on' type='submit'>Turn ON</button>";
+  html += "</form></div>";
+  html += "<div class='form-container'>";
+  html += "<form action='/LEDOff' method='POST'>";
+  html += "<button class='button off' type='submit'>Turn OFF</button>";
+  html += "</form></div>";
+  html += "</body></html>";
+
+  server.send(200, "text/html", html);
 }
 
-uint8_t readReg(uint8_t reg) {
-  Wire.beginTransmission(0x21);
-  Wire.write(reg);
-  Wire.endTransmission();
 
-  Wire.requestFrom(0x21, 1);
-  if (Wire.available()) {
-    return Wire.read();
-  }
-  return 0xFF;
+void handleLEDOn() {
+  digitalWrite(ledPin, HIGH);
+  server.sendHeader("Location", "/", true);
+  server.send(302, "text/plain", "");
+}
+
+void handleLEDOff() {
+  digitalWrite(ledPin, LOW);
+  server.sendHeader("Location", "/", true);
+  server.send(302, "text/plain", "");
 }
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(OV7670_SDA, OV7670_SCL);
-  delay(1000);
+  pinMode(ledPin, OUTPUT);
 
-  Serial.println("Checking OV7670...");
-
-  uint8_t pid = readReg(0x0A);  // PID = 0x76
-  uint8_t ver = readReg(0x0B);  // VER = 0x73 or similar
-
-  Serial.print("PID: 0x");
-  Serial.println(pid, HEX);
-  Serial.print("VER: 0x");
-  Serial.println(ver, HEX);
-
-  if (pid == 0x76) {
-    Serial.println("OV7670 detected!");
-  } else {
-    Serial.println("Camera not detected. Check wiring and power.");
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
+
+  Serial.println("\nConnected! IP address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", handleRoot);
+  server.on("/LEDOn", HTTP_POST, handleLEDOn);
+  server.on("/LEDOff", HTTP_POST, handleLEDOff);
+
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
 void loop() {
-  delay(2000);
+  server.handleClient();
 }
